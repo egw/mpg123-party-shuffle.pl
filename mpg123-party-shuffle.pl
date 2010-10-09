@@ -47,8 +47,7 @@ while (1) {
             # the buffer is "full" (i.e. processable) when the
             # last character is a newline.
             $mpg123_buffer .= $in;
-            next unless rindex($mpg123_buffer, "\n") + 1 ==
-                        length($mpg123_buffer);
+            next unless substr($mpg123_buffer, -1) eq "\n";
 
             if ($mpg123_buffer =~ m/^\@P 0$/m or
                 $mpg123_buffer =~ m/^\@R MPG123/m)
