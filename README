@@ -1,8 +1,27 @@
+Description
+===========
+
+A simple terminal-based mp3 player/party shuffler.
+
+The biggest difference between mpg123-party-shuffler.pl and other players'
+party shuffles is how random songs are chosen.  Instead of picking from
+a flat list (where each song has an equal chance of being chosen) or a
+weighted list based on ratings, mpg123-party-shuffler.pl descends down
+the directory structure every time it wants to choose a song.
+
+This means there will be many more directory operations over the running
+time of the program and that the queue will be biased towards songs
+shallower in the tree.  The benefits are that no database of available
+songs needs to be maintained and that changes to the directory (like
+adding or moving or removing songs) show up immediately.
+
+Right now this uses mpg321 instead of mpg123 because mpg123 keeps on
+dying randomly on my netbook.
 
 Usage
 =====
 
-    ./mpg123-party-shuffle.pl ~/path/to/music ~/path/to/more/music ....
+  ./mpg123-party-shuffle.pl ~/path/to/music ~/path/to/more/music ....
 
 Design Goals
 ============
@@ -14,6 +33,20 @@ In no particular order,
   . manually add/remove tracks
   . don't want to load/maintain database, just use filesystem
 
-Right now this uses mpg321 instead of mpg123 because mpg123 keeps on
-dying randomly on my netbook.
+Todos (maybe)
+=============
+
+Also in no particular order,
+
+  . scrobble
+  . read id3 tags (mpg123 and mpg321 do this, so it's mostly parsing
+    the @I output.)
+  . ratings (save to id3 POPM (popularimeter) tag)
+  . update id3 play counter
+  . curses
+  . play ogg
+  . dance, dance, dance!
+  . readline and/or tab-completion
+  . light/medium/heavy rotation directories
+
 
