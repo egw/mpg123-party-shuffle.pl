@@ -25,8 +25,7 @@ $select->add($mpg123_out);
 
 # add fifo interface if it exists.
 if (-p "fifo") {
-    # sysopen FIFO, "fifo", O_RDONLY | O_NONBLOCK;
-    sysopen FIFO, "fifo", O_RDWR;
+    sysopen FIFO, "fifo", O_RDONLY | O_NONBLOCK;
     $select->add(\*FIFO);
 }
 
@@ -39,22 +38,47 @@ while (1) {
         my $ret = sysread $fh, my $in, 1024;
 
         if ($fh == $mpg123_out) {
-            # print "From mpg123:\n$in\n" unless $in =~ m/^\@F/;
-            if ($in =~ m/^\@P 0$/m or $in =~ m/^\@R MPG123$/m) {
+            if ($in =~ m/^\@P 0$/m or $in =~ m/^\@R MPG123/m) {
+                # we've just finished a track or we've just started up
+
                 my $track = shift(@queue);
                 print "playing $track\n";
                 print $mpg123_in "l $track\n";
             }
+            elsif ($in =~ m/^\@P 1$/) { print "paused\n"; }
+            elsif ($in =~ m/^\@P 2$/) { print "resumed\n"; }
         }
         elsif ($fh == \*FIFO or $fh == \*STDIN) {
-            # print "From FIFO or STDIN (sending to mpg123):\n$in\n";
-            print $mpg123_in $in;
+            chomp($in = lc($in));
+
+            if    ($in eq 'help') { print <<__HELP__; }
+next => stops the current track and go to the next one
+stop => pause the player in the current track
+quit => quit
+list, queue => show the current queue
+   everything else goes straight to mpg123
+__HELP__
+            elsif ($in eq 'next') { print $mpg123_in "stop\n"; }
+            elsif ($in eq 'stop') { print $mpg123_in "pause\n"; }
+            elsif ($in eq 'quit') {
+                $select->remove($mpg123_out);
+                print $mpg123_in "quit\n";
+                goto EXIT;
+            }
+            elsif ($in eq 'list' or $in eq 'queue') {
+                my $i = 0;
+                print map { $i++ . ": $_\n" } @queue;
+            }
+            else { print $mpg123_in $in; }
         }
 
     }
 
     _fill_queue(\@queue, $dirs, 5) if @queue < 5;
 }
+
+EXIT:
+waitpid($pid, 0);
 
 
 # this starts with a list (a reference to a list) of directories and
