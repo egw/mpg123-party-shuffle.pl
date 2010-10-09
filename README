@@ -1,8 +1,10 @@
-PUT README HERE
 
 idea:
     command line mp3 player
     party shuffle
     manually add/remove tracks
     don't want to load/maintain database, just use filesystem
+
+Right now this uses mpg321 instead of mpg123 because mpg123 keeps on
+dying randomly on my netbook.
 
