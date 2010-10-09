@@ -1,15 +1,16 @@
 #!/usr/bin/perl
 
-# using open2 and a fifo to control mpg123.  this is mostly a demonstration
-# about how to combining open2 and IO::Select
+# mpg123 based party shuffler
 
 use warnings;
 use strict;
 
-use IO::Select;
 use Fcntl;
+use IO::Select;
 use IPC::Open2;
 use List::Util qw(shuffle);
+
+my $MIN_QUEUE_SIZE = 5;
 
 my $dirs = [grep {-d $_} @ARGV];
 print <<__USAGE__ and exit unless @$dirs;
@@ -30,7 +31,7 @@ if (-p "fifo") {
 }
 
 my @queue = ();
-_fill_queue(\@queue, $dirs, 5);
+_fill_queue(\@queue, $dirs);
 
 
 while (1) {
@@ -54,6 +55,8 @@ while (1) {
             my ($cmd, @args) = split(" ", $in);
             next unless $cmd;
 
+            # dispatch.  see _print_help() to read what command is
+            # supposed to do what.
             if    ($cmd eq 'help') { _print_help(); }
             elsif ($cmd eq 'next') { print $mpg123_in "stop\n"; }
             elsif ($cmd eq 'stop' or $cmd eq 'start') {
@@ -64,18 +67,16 @@ while (1) {
                 print $mpg123_in "quit\n";
                 goto EXIT;
             }
-            elsif ($cmd eq 'list' or $cmd eq 'queue') {
-                _print_queue(\@queue);
-            }
+            elsif ($cmd eq 'list' or $cmd eq 'queue') { _print_queue(\@queue); }
             elsif ($cmd eq 'remove') {
                 _remove_from_queue(\@queue, \@args);
-                _fill_queue(\@queue, $dirs, 5);
+                _fill_queue(\@queue, $dirs);
                 _print_queue(\@queue);
             }
             elsif ($cmd eq 'clear') {
                 print "clearing queue!\n";
                 @queue = ();
-                _fill_queue(\@queue, $dirs, 5);
+                _fill_queue(\@queue, $dirs);
                 _print_queue(\@queue);
             }
             elsif ($cmd eq 'add') {
@@ -87,7 +88,7 @@ while (1) {
 
     }
 
-    _fill_queue(\@queue, $dirs, 5) if @queue < 5;
+    _fill_queue(\@queue, $dirs) if @queue < $MIN_QUEUE_SIZE;
 }
 
 EXIT:
@@ -128,7 +129,7 @@ sub _get_random_mp3 {
 # $num songs on it.  returns the number of tracks added.
 sub _fill_queue {
     my ($queue, $dirs, $num) = @_;
-    $num ||= 5;
+    $num ||= $MIN_QUEUE_SIZE;
 
     my $len = @$queue;
 
@@ -142,23 +143,33 @@ sub _fill_queue {
 sub _print_queue {
     my ($queue) = @_;
 
+    # yes.  we WILL start counting from zero.
     my $i = 0;
     print map { $i++ . ": $_\n" } @$queue;
 }
 
 sub _print_help {
     print <<__HELP__;
-next => stops the current track and go to the next one
-stop/start => pause/unpause the player in the current track
-quit => quit
-list, queue => show the current queue
-remove [#|head|tail] => remove an item from the queue.  defaults to, oh,
-    head.  everything else goes straight to mpg123
-add [#|head|tail] <file> => add an item to the queue at the given position.
-    defaults to the end (so acts like a push).  er, i guess if you have a
-    file with a numeric name (or 'head' or 'tail') then you'll have to
-    explicitly state the position.
-clear => clear and refill the queue
+    next:   stop the current track and go to the next one.
+
+    stop/start:
+            pause/unpause the player in the current track.
+
+    quit:   quit.
+
+    list/queue:
+            show the queue.
+
+    remove [#|head|start|tail|end]:
+            remove an item from the queue.  Defaults to head.
+
+    add [#|head|start|tail|end] <file>
+            add an item to the queue at the given position.  Defaults to
+            the end (like push).
+
+    clear:  clear and refill the queue.
+
+    Everything else goes straight to mpg123
 __HELP__
 }
 
@@ -166,8 +177,9 @@ sub _remove_from_queue {
     my ($queue, $args) = @_;
 
     $args->[0] ||= 0;
-    $args->[0] = 0 if lc($args->[0]) eq 'head';
-    $args->[0] = -1 if lc($args->[0]) eq 'tail';
+    $args->[0] = lc($args->[0]);
+    $args->[0] =  0 if $args->[0] eq 'head' or $args->[0] eq 'start';
+    $args->[0] = -1 if $args->[0] eq 'tail' or $args->[0] eq 'end';
     $args->[0] = -1 if $args->[0] > @$queue;
 
     my $removed = splice @$queue, $args->[0], 1;
@@ -178,25 +190,25 @@ sub _add_to_queue {
     my ($queue, $args) = @_;
 
     if (@$args == 0) {
-        print "add needs a filename\n";
+        print "=> 'add' needs a filename!\n";
         return;
     }
 
     my $pos = -1;
     if ($args->[0] =~ m/^(?:head|tail|\d+)$/i) {
-        $pos = shift(@$args);
-        $pos = -1 if $pos eq 'tail';
-        $pos = 0 if $pos eq 'head';
+        $pos = lc(shift(@$args));
+        $pos =  0 if $pos eq 'head' or $pos eq 'start' ;
+        $pos = -1 if $pos eq 'tail' or $pos eq 'end';
     }
 
     my $filename = join(" ", @$args);
     if (not -f $filename) {
-        print "$filename is not a file?\n";
+        print "=> $filename is not a file!\n";
         return;
     }
 
-    if ($pos == -1) { push @$queue, $filename; }
-    elsif ($pos == 0) { unshift @$queue, $filename; }
+    if    ($pos == -1) { push @$queue, $filename; }
+    elsif ($pos ==  0) { unshift @$queue, $filename; }
     else { splice @$queue, $pos, 0, $filename; }
 }
 
