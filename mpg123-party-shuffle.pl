@@ -11,8 +11,10 @@ use Fcntl;
 use IPC::Open2;
 use List::Util qw(shuffle);
 
-# sysopen FIFO, "fifo", O_RDONLY | O_NONBLOCK;
-sysopen FIFO, "fifo", O_RDWR;
+@ARGV = grep {-d $_} @ARGV;
+print <<__USAGE__ and exit unless @ARGV;
+useage: mpg123-party-shuffle.pl <directories>
+__USAGE__
 
 my $pid = open2(my $mpg123_out, my $mpg123_in, "mpg321", "-R", "-");
 # my $pid = open2(my $mpg123_out, my $mpg123_in, "mpg123", "--remote");
@@ -20,7 +22,13 @@ my $pid = open2(my $mpg123_out, my $mpg123_in, "mpg321", "-R", "-");
 my $select = IO::Select->new();
 $select->add(\*STDIN);
 $select->add($mpg123_out);
-$select->add(\*FIFO);
+
+# add fifo interface if it exists.
+if (-p "fifo") {
+    # sysopen FIFO, "fifo", O_RDONLY | O_NONBLOCK;
+    sysopen FIFO, "fifo", O_RDWR;
+    $select->add(\*FIFO);
+}
 
 my @queue = ();
 
@@ -28,10 +36,7 @@ while (1) {
     foreach my $fh ($select->can_read()) {
         my $ret = sysread $fh, my $in, 1024;
 
-        if ($fh == \*STDIN) {
-            print "From STDIN:\n$in\n";
-        }
-        elsif ($fh == $mpg123_out) {
+        if ($fh == $mpg123_out) {
             # print "From mpg123:\n$in\n" unless $in =~ m/^\@F/;
             if ($in =~ m/^\@P 0/ or $in =~ m/^\@R MPG123/) {
                 my $random_mp3 = _get_random_mp3(\@ARGV);
@@ -39,8 +44,8 @@ while (1) {
                 print $mpg123_in "l $random_mp3\n";
             }
         }
-        elsif ($fh == \*FIFO) {
-            print "From FIFO (sending to mpg123):\n$in\n";
+        elsif ($fh == \*FIFO or $fh == \*STDIN) {
+            # print "From FIFO or STDIN (sending to mpg123):\n$in\n";
             print $mpg123_in $in;
         }
 
@@ -72,7 +77,7 @@ sub _get_random_mp3 {
     }
 
     # make sure the file's an mp3
-    next unless $pointer =~ m/.mp3$/i;
+    goto RESET unless $pointer =~ m/.mp3$/i;
 
     return $pointer;
 }
