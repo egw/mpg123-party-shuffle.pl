@@ -57,8 +57,12 @@ next => stops the current track and go to the next one
 stop/start => pause/unpause the player in the current track
 quit => quit
 list, queue => show the current queue
-remove <#|head|tail> => remove an item from the queue.  defaults to, oh,
+remove [#|head|tail] => remove an item from the queue.  defaults to, oh,
     head.  everything else goes straight to mpg123
+add [#|head|tail] <file> => add an item to the queue at the given position.
+    defaults to the end (so acts like a push).  er, i guess if you have a
+    file with a numeric name (or 'head' or 'tail') then you'll have to
+    explicitly state the position.
 __HELP__
             elsif ($cmd eq 'next') { print $mpg123_in "stop\n"; }
             elsif ($cmd eq 'stop' or $cmd eq 'start') {
@@ -68,6 +72,9 @@ __HELP__
                 $select->remove($mpg123_out);
                 print $mpg123_in "quit\n";
                 goto EXIT;
+            }
+            elsif ($cmd eq 'list' or $cmd eq 'queue') {
+                _print_queue(\@queue);
             }
             elsif ($cmd eq 'remove') {
                 $args[0] ||= 0;
@@ -80,7 +87,29 @@ __HELP__
                 _fill_queue(\@queue, $dirs, 5);
                 _print_queue(\@queue);
             }
-            elsif ($cmd eq 'list' or $cmd eq 'queue') {
+            elsif ($cmd eq 'add') {
+                if (@args == 0) {
+                    print "add needs a filename\n";
+                    next;
+                }
+
+                my $pos = -1;
+                if ($args[0] =~ m/^(?:head|tail|\d+)$/i) {
+                    $pos = shift(@args);
+                    $pos = -1 if $pos eq 'tail';
+                    $pos = 0 if $pos eq 'head';
+                }
+
+                my $filename = join(" ", @args);
+                if (not -f $filename) {
+                    print "$filename not a file?\n";
+                    next;
+                }
+
+                if ($pos == -1) { push @queue, $filename; }
+                elsif ($pos == 0) { unshift @queue, $filename; }
+                else { splice @queue, $pos, 0, $filename; }
+
                 _print_queue(\@queue);
             }
             else { print $mpg123_in "$in\n"; }
