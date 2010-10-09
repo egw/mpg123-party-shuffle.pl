@@ -44,7 +44,7 @@ while (1) {
 
                 my $track = shift(@queue);
                 print "playing $track\n";
-                print $mpg123_in "l $track\n";
+                print $mpg123_in "load $track\n";
             }
             elsif ($in =~ m/^\@P 1$/) { print "paused\n"; }
             elsif ($in =~ m/^\@P 2$/) { print "resumed\n"; }
@@ -72,6 +72,10 @@ while (1) {
                 _remove_from_queue(\@queue, \@args);
                 _fill_queue(\@queue, $dirs);
                 _print_queue(\@queue);
+            }
+            elsif ($cmd eq 'play') {
+                print "playing @args\n";
+                print $mpg123_in "load @args\n";
             }
             elsif ($cmd eq 'clear') {
                 print "clearing queue!\n";
@@ -166,6 +170,9 @@ sub _print_help {
     add [#|head|start|tail|end] <file>
             add an item to the queue at the given position.  Defaults to
             the end (like push).
+
+    play <file>:
+            immediately play file.
 
     clear:  clear and refill the queue.
 
