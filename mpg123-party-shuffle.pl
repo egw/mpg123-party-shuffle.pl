@@ -49,27 +49,41 @@ while (1) {
             elsif ($in =~ m/^\@P 2$/) { print "resumed\n"; }
         }
         elsif ($fh == \*FIFO or $fh == \*STDIN) {
-            chomp($in = lc($in));
+            chomp($in);
+            my ($cmd, @args) = split(" ", $in);
 
-            if    ($in eq 'help') { print <<__HELP__; }
+            if    ($cmd eq 'help') { print <<__HELP__; }
 next => stops the current track and go to the next one
-stop => pause the player in the current track
+stop/start => pause/unpause the player in the current track
 quit => quit
 list, queue => show the current queue
-   everything else goes straight to mpg123
+remove <#|head|tail> => remove an item from the queue.  defaults to, oh,
+    head.  everything else goes straight to mpg123
 __HELP__
-            elsif ($in eq 'next') { print $mpg123_in "stop\n"; }
-            elsif ($in eq 'stop') { print $mpg123_in "pause\n"; }
-            elsif ($in eq 'quit') {
+            elsif ($cmd eq 'next') { print $mpg123_in "stop\n"; }
+            elsif ($cmd eq 'stop' or $cmd eq 'start') {
+                print $mpg123_in "pause\n";
+            }
+            elsif ($cmd eq 'quit') {
                 $select->remove($mpg123_out);
                 print $mpg123_in "quit\n";
                 goto EXIT;
             }
-            elsif ($in eq 'list' or $in eq 'queue') {
-                my $i = 0;
-                print map { $i++ . ": $_\n" } @queue;
+            elsif ($cmd eq 'remove') {
+                $args[0] ||= 0;
+                $args[0] = 0 if lc($args[0]) eq 'head';
+                $args[0] = -1 if lc($args[0]) eq 'tail';
+                $args[0] = -1 if $args[0] > @queue;
+
+                my $removed = splice @queue, $args[0], 1;
+                print "removed $removed\n";
+                _fill_queue(\@queue, $dirs, 5);
+                _print_queue(\@queue);
             }
-            else { print $mpg123_in $in; }
+            elsif ($cmd eq 'list' or $cmd eq 'queue') {
+                _print_queue(\@queue);
+            }
+            else { print $mpg123_in "$in\n"; }
         }
 
     }
@@ -124,5 +138,12 @@ sub _fill_queue {
     }
 
     return @$queue - $len;
+}
+
+sub _print_queue {
+    my ($queue) = @_;
+
+    my $i = 0;
+    print map { $i++ . ": $_\n" } @$queue;
 }
 
