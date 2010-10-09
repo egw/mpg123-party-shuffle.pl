@@ -1,9 +1,18 @@
 
-idea:
-    command line mp3 player
-    party shuffle
-    manually add/remove tracks
-    don't want to load/maintain database, just use filesystem
+Usage
+=====
+
+    ./mpg123-party-shuffle.pl ~/path/to/music ~/path/to/more/music ....
+
+Design Goals
+============
+
+In no particular order,
+
+  . command line-based
+  . party shuffle, like in itunes or amarok
+  . manually add/remove tracks
+  . don't want to load/maintain database, just use filesystem
 
 Right now this uses mpg321 instead of mpg123 because mpg123 keeps on
 dying randomly on my netbook.
