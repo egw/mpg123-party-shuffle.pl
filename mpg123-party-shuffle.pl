@@ -5,6 +5,7 @@
 use warnings;
 use strict;
 
+use Data::Dumper;
 use Fcntl;
 use IO::Select;
 use IPC::Open2;
@@ -36,6 +37,8 @@ _fill_queue(\@queue, $dirs);
 # sometimes we read faster than mpg123 writes, so we save partial lines
 # in a buffer
 my ($mpg123_buffer) = ("");
+my %mp3_info = ();
+
 while (1) {
 
     foreach my $fh ($select->can_read(0.25)) {
@@ -55,22 +58,20 @@ while (1) {
                 # we've just finished a track or we've just started up
 
                 my $track = shift(@queue);
-                print "playing $track\n";
-                print $mpg123_in "load $track\n";
+                %mp3_info = _mpg123_play($track, $mpg123_in);
             }
             elsif ($mpg123_buffer =~ m/^\@P 1$/) { print "paused\n"; }
             elsif ($mpg123_buffer =~ m/^\@P 2$/) { print "resumed\n"; }
             elsif ($mpg123_buffer =~ m/^\@I ID3:(.*)/) {
-                # read id3v1 tags
-                # print "ID3: {$mpg123_buffer}{$1}\n";
+                # my version of mpg321 only reads id3v1 tags :(
+                # the info is in a fixed-length format, which we parse
+                # with unpack.  the map removes trailing spaces.
 
-                my ($title, $artist, $album, $year, $comment, $genre) =
+                @mp3_info{qw/TITLE ARTIST ALBUM YEAR COMMENT GENRE/} =
+                    map {s/\s+$//; $_;}
                     unpack("a30 a30 a30 a4 a30 a30", $1);
-                print "ARTIST: $artist\nTITLE: $title\n";
-                print "ALBUM: $album\n" if $album;
-                print "YEAR: $year\n" if $year;
-                print "COMMENT: $comment\n" if $comment;
-                print "GENRE: $genre\n" if $genre;
+
+                print Dumper \%mp3_info;
             }
 
             # clear the buffer
@@ -101,8 +102,7 @@ while (1) {
                 _print_queue(\@queue);
             }
             elsif ($cmd eq 'play') {
-                print "playing @args\n";
-                print $mpg123_in "load @args\n";
+                %mp3_info = _mpg123_play(join(" ", @args), $mpg123_in);
             }
             elsif ($cmd eq 'clear') {
                 print "clearing queue!\n";
@@ -113,6 +113,9 @@ while (1) {
             elsif ($cmd eq 'add') {
                 _add_to_queue(\@queue, \@args);
                 _print_queue(\@queue);
+            }
+            elsif ($cmd eq 'info') {
+                print Dumper \%mp3_info;
             }
             else { print $mpg123_in "$in\n"; }
         }
@@ -203,6 +206,8 @@ sub _print_help {
 
     clear:  clear and refill the queue.
 
+    info:   information about the currently playing song.
+
     Everything else goes straight to mpg123
 __HELP__
 }
@@ -244,5 +249,14 @@ sub _add_to_queue {
     if    ($pos == -1) { push @$queue, $filename; }
     elsif ($pos ==  0) { unshift @$queue, $filename; }
     else { splice @$queue, $pos, 0, $filename; }
+}
+
+sub _mpg123_play {
+    my ($track, $mpg123_in) = @_;
+
+    print "playing $track\n";
+    print $mpg123_in "load $track\n";
+
+    return (FILENAME => $track);
 }
 
