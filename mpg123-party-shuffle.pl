@@ -50,20 +50,11 @@ while (1) {
         }
         elsif ($fh == \*FIFO or $fh == \*STDIN) {
             chomp($in);
-            my ($cmd, @args) = split(" ", $in);
 
-            if    ($cmd eq 'help') { print <<__HELP__; }
-next => stops the current track and go to the next one
-stop/start => pause/unpause the player in the current track
-quit => quit
-list, queue => show the current queue
-remove [#|head|tail] => remove an item from the queue.  defaults to, oh,
-    head.  everything else goes straight to mpg123
-add [#|head|tail] <file> => add an item to the queue at the given position.
-    defaults to the end (so acts like a push).  er, i guess if you have a
-    file with a numeric name (or 'head' or 'tail') then you'll have to
-    explicitly state the position.
-__HELP__
+            my ($cmd, @args) = split(" ", $in);
+            next unless $cmd;
+
+            if    ($cmd eq 'help') { _print_help(); }
             elsif ($cmd eq 'next') { print $mpg123_in "stop\n"; }
             elsif ($cmd eq 'stop' or $cmd eq 'start') {
                 print $mpg123_in "pause\n";
@@ -77,39 +68,18 @@ __HELP__
                 _print_queue(\@queue);
             }
             elsif ($cmd eq 'remove') {
-                $args[0] ||= 0;
-                $args[0] = 0 if lc($args[0]) eq 'head';
-                $args[0] = -1 if lc($args[0]) eq 'tail';
-                $args[0] = -1 if $args[0] > @queue;
-
-                my $removed = splice @queue, $args[0], 1;
-                print "removed $removed\n";
+                _remove_from_queue(\@queue, \@args);
+                _fill_queue(\@queue, $dirs, 5);
+                _print_queue(\@queue);
+            }
+            elsif ($cmd eq 'clear') {
+                print "clearing queue!\n";
+                @queue = ();
                 _fill_queue(\@queue, $dirs, 5);
                 _print_queue(\@queue);
             }
             elsif ($cmd eq 'add') {
-                if (@args == 0) {
-                    print "add needs a filename\n";
-                    next;
-                }
-
-                my $pos = -1;
-                if ($args[0] =~ m/^(?:head|tail|\d+)$/i) {
-                    $pos = shift(@args);
-                    $pos = -1 if $pos eq 'tail';
-                    $pos = 0 if $pos eq 'head';
-                }
-
-                my $filename = join(" ", @args);
-                if (not -f $filename) {
-                    print "$filename not a file?\n";
-                    next;
-                }
-
-                if ($pos == -1) { push @queue, $filename; }
-                elsif ($pos == 0) { unshift @queue, $filename; }
-                else { splice @queue, $pos, 0, $filename; }
-
+                _add_to_queue(\@queue, \@args);
                 _print_queue(\@queue);
             }
             else { print $mpg123_in "$in\n"; }
@@ -174,5 +144,59 @@ sub _print_queue {
 
     my $i = 0;
     print map { $i++ . ": $_\n" } @$queue;
+}
+
+sub _print_help {
+    print <<__HELP__;
+next => stops the current track and go to the next one
+stop/start => pause/unpause the player in the current track
+quit => quit
+list, queue => show the current queue
+remove [#|head|tail] => remove an item from the queue.  defaults to, oh,
+    head.  everything else goes straight to mpg123
+add [#|head|tail] <file> => add an item to the queue at the given position.
+    defaults to the end (so acts like a push).  er, i guess if you have a
+    file with a numeric name (or 'head' or 'tail') then you'll have to
+    explicitly state the position.
+clear => clear and refill the queue
+__HELP__
+}
+
+sub _remove_from_queue {
+    my ($queue, $args) = @_;
+
+    $args->[0] ||= 0;
+    $args->[0] = 0 if lc($args->[0]) eq 'head';
+    $args->[0] = -1 if lc($args->[0]) eq 'tail';
+    $args->[0] = -1 if $args->[0] > @$queue;
+
+    my $removed = splice @$queue, $args->[0], 1;
+    print "removed $removed\n";
+}
+
+sub _add_to_queue {
+    my ($queue, $args) = @_;
+
+    if (@$args == 0) {
+        print "add needs a filename\n";
+        return;
+    }
+
+    my $pos = -1;
+    if ($args->[0] =~ m/^(?:head|tail|\d+)$/i) {
+        $pos = shift(@$args);
+        $pos = -1 if $pos eq 'tail';
+        $pos = 0 if $pos eq 'head';
+    }
+
+    my $filename = join(" ", @$args);
+    if (not -f $filename) {
+        print "$filename is not a file?\n";
+        return;
+    }
+
+    if ($pos == -1) { push @$queue, $filename; }
+    elsif ($pos == 0) { unshift @$queue, $filename; }
+    else { splice @$queue, $pos, 0, $filename; }
 }
 
