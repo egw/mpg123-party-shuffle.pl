@@ -33,21 +33,49 @@ if (-p "fifo") {
 my @queue = ();
 _fill_queue(\@queue, $dirs);
 
-
+# sometimes we read faster than mpg123 writes, so we save partial lines
+# in a buffer
+my ($mpg123_buffer) = ("");
 while (1) {
+
     foreach my $fh ($select->can_read(0.25)) {
         my $ret = sysread $fh, my $in, 1024;
 
         if ($fh == $mpg123_out) {
-            if ($in =~ m/^\@P 0$/m or $in =~ m/^\@R MPG123/m) {
+            # print "[$in]" unless $in =~ m/^\@F/;
+
+            # the buffer is "full" (i.e. processable) when the
+            # last character is a newline.
+            $mpg123_buffer .= $in;
+            next unless rindex($mpg123_buffer, "\n") + 1 ==
+                        length($mpg123_buffer);
+
+            if ($mpg123_buffer =~ m/^\@P 0$/m or
+                $mpg123_buffer =~ m/^\@R MPG123/m)
+            {
                 # we've just finished a track or we've just started up
 
                 my $track = shift(@queue);
                 print "playing $track\n";
                 print $mpg123_in "load $track\n";
             }
-            elsif ($in =~ m/^\@P 1$/) { print "paused\n"; }
-            elsif ($in =~ m/^\@P 2$/) { print "resumed\n"; }
+            elsif ($mpg123_buffer =~ m/^\@P 1$/) { print "paused\n"; }
+            elsif ($mpg123_buffer =~ m/^\@P 2$/) { print "resumed\n"; }
+            elsif ($mpg123_buffer =~ m/^\@I ID3:(.*)/) {
+                # read id3v1 tags
+                # print "ID3: {$mpg123_buffer}{$1}\n";
+
+                my ($title, $artist, $album, $year, $comment, $genre) =
+                    unpack("a30 a30 a30 a4 a30 a30", $1);
+                print "ARTIST: $artist\nTITLE: $title\n";
+                print "ALBUM: $album\n" if $album;
+                print "YEAR: $year\n" if $year;
+                print "COMMENT: $comment\n" if $comment;
+                print "GENRE: $genre\n" if $genre;
+            }
+
+            # clear the buffer
+            $mpg123_buffer = '';
         }
         elsif ($fh == \*FIFO or $fh == \*STDIN) {
             chomp($in);
