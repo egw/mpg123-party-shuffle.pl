@@ -5,7 +5,6 @@
 use warnings;
 use strict;
 
-use Data::Dumper;
 use Fcntl;
 use IO::Select;
 use IPC::Open2;
@@ -71,7 +70,7 @@ while (1) {
                     map {s/\s+$//; $_;}
                     unpack("a30 a30 a30 a4 a30 a30", $1);
 
-                print Dumper \%mp3_info;
+                _print_mp3_info(\%mp3_info);
             }
 
             # clear the buffer
@@ -102,6 +101,8 @@ while (1) {
                 _print_queue(\@queue);
             }
             elsif ($cmd eq 'play') {
+                print "=> 'play' needs a filename\n" and next unless @args;
+
                 %mp3_info = _mpg123_play(join(" ", @args), $mpg123_in);
             }
             elsif ($cmd eq 'clear') {
@@ -115,7 +116,7 @@ while (1) {
                 _print_queue(\@queue);
             }
             elsif ($cmd eq 'info') {
-                print Dumper \%mp3_info;
+                _print_mp3_info(\%mp3_info);
             }
             else { print $mpg123_in "$in\n"; }
         }
@@ -149,6 +150,7 @@ sub _get_random_mp3 {
                                     and goto RESET;
         my @inodes = grep { not m/^\./ } readdir $dh;
         closedir $dh;
+        goto RESET unless @inodes;    # start over if we've hit an empty dir
 
         $inode = "$inode/".(shuffle(@inodes))[0];
     }
@@ -258,5 +260,15 @@ sub _mpg123_play {
     print $mpg123_in "load $track\n";
 
     return (FILENAME => $track);
+}
+
+sub _print_mp3_info {
+    my ($mp3_info) = @_;
+
+    print "ARTIST: $mp3_info->{ARTIST}\n";
+    print "TITLE : $mp3_info->{TITLE}\n";
+    print "ALBUM : $mp3_info->{ALBUM}" .
+        ($mp3_info->{YEAR} ? " ($mp3_info->{YEAR})" : "") . "\n"
+        if $mp3_info->{ALBUM};
 }
 
