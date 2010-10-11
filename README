@@ -38,8 +38,8 @@ Todos (maybe)
 
 Also in no particular order,
 
-  . scrobble
-  . read id3 tags (mpg123 and mpg321 do this, so it's mostly parsing
+  x scrobble
+  x read id3 tags (mpg123 and mpg321 do this, so it's mostly parsing
     the @I output.)
   . ratings (save to id3 POPM (popularimeter) tag)
   . update id3 play counter
@@ -49,4 +49,12 @@ Also in no particular order,
   . readline and/or tab-completion
   . light/medium/heavy rotation directories
 
+Bugs
+====
+
+The scrobbling isn't ideal.  It calls user.updateNowPlaying at the start
+of a song (which is good), but then calls track.scrobble at 80% through
+the song.  This means last.fm doesn't think anything is happening for
+the last 20% of the song.  Maybe move track.scrobble to the very end?
+Maybe queue up track.scrobble at 80%, but only send it at the end?
 
