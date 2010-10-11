@@ -111,8 +111,8 @@ while (1) {
                                   # to do, so we'll skip them for now.
                     $lastfm_sk and
                     not $mp3_info{SCROBBLED} and
-                    $mp3_info->{ARTIST} and
-                    $mp3_info->{TITLE}
+                    $mp3_info{ARTIST} and
+                    $mp3_info{TITLE} and
                     $1 > $2 * 4)
                 {
                     # print $mpg123_buffer;
