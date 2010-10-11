@@ -9,6 +9,7 @@ use Fcntl;
 use IO::Select;
 use IPC::Open2;
 use List::Util qw(shuffle);
+use LastFM;
 
 my $MIN_QUEUE_SIZE = 5;
 
@@ -30,13 +31,19 @@ if (-p "fifo") {
     $select->add(\*FIFO);
 }
 
-my @queue = ();
-_fill_queue(\@queue, $dirs);
 
 # sometimes we read faster than mpg123 writes, so we save partial lines
 # in a buffer
 my ($mpg123_buffer) = ("");
-my %mp3_info = ();
+my %mp3_info = ();             # info about the currently playing mp3
+my $lastfm_sk = undef;         # last.fm session key for scrobbling
+my @queue = ();                # queue of songs
+_fill_queue(\@queue, $dirs);
+
+my $lastfm = LWP::UserAgent::LastFM->new();
+$lastfm->agent('mpg123-party-shuffler/1.0');
+$lastfm->api_key('e356a13fae4326d3489e1380c4605e46');
+$lastfm->api_secret('229b9a270843b824e365b2b5ace85f04');
 
 while (1) {
 
@@ -51,6 +58,10 @@ while (1) {
             $mpg123_buffer .= $in;
             next unless substr($mpg123_buffer, -1) eq "\n";
 
+            # note we do a series of ifs because the buffer could
+            # contain more than one line.  TODO: proper split and
+            # parse every line.
+
             if ($mpg123_buffer =~ m/^\@P 0$/m or
                 $mpg123_buffer =~ m/^\@R MPG123/m)
             {
@@ -59,9 +70,12 @@ while (1) {
                 my $track = shift(@queue);
                 %mp3_info = _mpg123_play($track, $mpg123_in);
             }
-            elsif ($mpg123_buffer =~ m/^\@P 1$/) { print "paused\n"; }
-            elsif ($mpg123_buffer =~ m/^\@P 2$/) { print "resumed\n"; }
-            elsif ($mpg123_buffer =~ m/^\@I ID3:(.*)/) {
+
+            if ($mpg123_buffer =~ m/^\@P 1$/) { print "paused\n"; }
+
+            if ($mpg123_buffer =~ m/^\@P 2$/) { print "resumed\n"; }
+
+            if ($mpg123_buffer =~ m/^\@I ID3:(.*)/) {
                 # my version of mpg321 only reads id3v1 tags :(
                 # the info is in a fixed-length format, which we parse
                 # with unpack.  the map removes trailing spaces.
@@ -71,6 +85,50 @@ while (1) {
                     unpack("a30 a30 a30 a4 a30 a30", $1);
 
                 _print_mp3_info(\%mp3_info);
+
+                # scrobble.  perhaps this should be forked or something
+                # so the rest of the script isn't blocked.  anyhow
+                # turn off scrobbling on error.
+                if ($lastfm_sk and $mp3_info{ARTIST} and $mp3_info{TITLE}) {
+                    my $ret = $lastfm->call_auth('user.updateNowPlaying',
+                        $lastfm_sk,
+                        artist => $mp3_info{ARTIST},
+                        track  => $mp3_info{TITLE},);
+
+                    print "ERROR scrobbling (user.updateNowPlaying)\n".
+                        $ret->decoded_content() and $lastfm_sk = undef
+                        unless $ret->is_success();
+                }
+            }
+
+            if ($mpg123_buffer =~ m/^\@F ([-.\d]+) ([-.\d]+)/m) {
+               
+                # scrobble when we're 80% through the song
+
+                if ($2 > 100 and  # mpg321 has this strange thing where
+                                  # sometimes the frames remaining and time
+                                  # remaining are negative.  not sure what
+                                  # to do, so we'll skip them for now.
+                    $lastfm_sk and
+                    not $mp3_info{SCROBBLED} and
+                    $mp3_info->{ARTIST} and
+                    $mp3_info->{TITLE}
+                    $1 > $2 * 4)
+                {
+                    # print $mpg123_buffer;
+
+                    my $ret = $lastfm->call_auth('track.scrobble',
+                        $lastfm_sk,
+                        artist => $mp3_info{ARTIST},
+                        track  => $mp3_info{TITLE},
+                        timestamp => time(),);
+
+                    print "ERROR scrobbling (track.scrobble)\n".
+                        $ret->decoded_content() and $lastfm_sk = undef
+                        unless $ret->is_success();
+
+                    $mp3_info{SCROBBLED} = 1;
+                }
             }
 
             # clear the buffer
@@ -117,6 +175,20 @@ while (1) {
             }
             elsif ($cmd eq 'info') {
                 _print_mp3_info(\%mp3_info);
+            }
+            elsif ($cmd eq 'scrobble') {
+                if (not @args) {
+                    print "scrobble what?  scrobble <session key> or ".
+                        "scrobble off?\n";
+                }
+                elsif (lc($args[0]) eq 'off') {
+                    print "scrobbling turned off\n";
+                    $lastfm_sk = undef;
+                }
+                else {
+                    print "scrobbling turned on\n";
+                    $lastfm_sk = $args[0];
+                }
             }
             else { print $mpg123_in "$in\n"; }
         }
@@ -199,7 +271,7 @@ sub _print_help {
     remove [#|head|start|tail|end]:
             remove an item from the queue.  Defaults to head.
 
-    add [#|head|start|tail|end] <file>
+    add [#|head|start|tail|end] <file>:
             add an item to the queue at the given position.  Defaults to
             the end (like push).
 
@@ -209,6 +281,10 @@ sub _print_help {
     clear:  clear and refill the queue.
 
     info:   information about the currently playing song.
+
+    scrobble [session key|off]:
+            turn scrobbling on and off.  Right now session keys need to
+            be generated manually.
 
     Everything else goes straight to mpg123
 __HELP__
@@ -259,16 +335,15 @@ sub _mpg123_play {
     print "playing $track\n";
     print $mpg123_in "load $track\n";
 
-    return (FILENAME => $track);
+    return (FILENAME => $track, SCROBBLED => 0, ARTIST => '', TITLE => '');
 }
 
 sub _print_mp3_info {
     my ($mp3_info) = @_;
 
-    print "ARTIST: $mp3_info->{ARTIST}\n";
-    print "TITLE : $mp3_info->{TITLE}\n";
+    print "ARTIST: $mp3_info->{ARTIST}\nTITLE : $mp3_info->{TITLE}\n";
     print "ALBUM : $mp3_info->{ALBUM}" .
-        ($mp3_info->{YEAR} ? " ($mp3_info->{YEAR})" : "") . "\n"
-        if $mp3_info->{ALBUM};
+          ($mp3_info->{YEAR} ? " ($mp3_info->{YEAR})" : "") . "\n"
+          if $mp3_info->{ALBUM};
 }
 
