@@ -9,6 +9,7 @@ use Fcntl;
 use IO::Select;
 use IPC::Open2;
 use List::Util qw(shuffle);
+
 use LastFM;
 
 my $MIN_QUEUE_SIZE = 5;
@@ -102,6 +103,7 @@ while (1) {
             }
 
             if ($mpg123_buffer =~ m/^\@F ([-.\d]+) ([-.\d]+)/m) {
+                $mp3_info{MPG123_FRAME_INFO} = $mpg123_buffer;
                
                 # scrobble when we're 80% through the song
 
@@ -345,5 +347,8 @@ sub _print_mp3_info {
     print "ALBUM : $mp3_info->{ALBUM}" .
           ($mp3_info->{YEAR} ? " ($mp3_info->{YEAR})" : "") . "\n"
           if $mp3_info->{ALBUM};
+
+    print "MPG123_FRAME_INFO: $mp3_info->{MPG123_FRAME_INFO}\n"
+        if $mp3_info->{MPG123_FRAME_INFO};
 }
 
