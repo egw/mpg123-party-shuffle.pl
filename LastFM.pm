@@ -1,9 +1,6 @@
 
 package LWP::UserAgent::LastFM;
 
-# http://search.cpan.org/~lbrocard/Net-LastFM-0.34/lib/Net/LastFM.pm
-# http://easyclasspage.de/lastfm/seite-11.html
-
 use warnings;
 use strict;
 
@@ -19,6 +16,7 @@ sub new {
     my $self = $class->SUPER::new();
 
     $self->agent('Yet-Another-LastFM-Perl-Module/0.001gamma');
+    $self->{api_key} = $self->{api_secret} = undef;
 
     bless($self, $class);
 }
@@ -67,6 +65,9 @@ sub api_key { my $self = shift(); return @_ ? $self->{api_key} = shift() : $self
 sub secret { my $self = shift(); return @_ ? $self->{api_secret} = shift() : $self->{api_secret}; }
 sub api_secret { my $self = shift(); return @_ ? $self->{api_secret} = shift() : $self->{api_secret}; }
 
+######################################################################
+######################################################################
+######################################################################
 sub get_authorization_url {
     my ($self) = @_;
 
@@ -110,42 +111,98 @@ LWP::UserAgent::LastFM - a(nother) simple interface to the Last.fm API
 =head1 DESCRIPTION
 
 Based on Klaus Tockloth's lmdCMD.pl at
-http://easyclasspage.de/lastfm/seite-11.html but implemented as a subclass
-of LWP::UserAgent.
+http://easyclasspage.de/lastfm/seite-11.html, but implemented as a
+subclass of LWP::UserAgent.
 
 =head1 METHODS
+
+In addition to the methods inherited from LWP::UserAgent, the LastFM
+subclass defines or overrides these methods.
 
 =over 4
 
 =item new([$api_key], [$api_secret])
 
+Constructor.
+
 =item call($method, %params)
 
-Call an API method.
+Call an API method.  All calls are signed.  Returns the HTTP::Response
+of the method call.
 
 =item call_auth($method, $session_key, %params)
 
 Call an authenticated API method.
 
+=item api_key([$api_key])
+
+=item key([$api_key])
+
+Get/set the api key.  This is public and sent with each request.
+
+=item api_secret([$api_secret])
+
+=item secret([$api_secret])
+
+Get/set the api secret.  This is private and is never sent back
+to Last.fm.
+
 =back
 
-=head1 OTHER METHODS
+=head1 CONVENIENCE METHODS
 
 =over 4
 
-=item get_authorization_url()
+=item get_authorization_url( )
 
-Get an authorization url.  The user should go here and authorize the
-application.
+Get an authorization url.  The user needs to go to this url in order to
+authorize the application.
 
 =item get_session_key([$token])
 
 Return the session key associated with the given token.  This should be
 called after the user authorizes the app on the web site.
 
+If $token is not passed, this uses the $token received by
+get_authorization_url().  This is a little sketchy because one has to
+make sure the LastFM instance that's asking for the token is the same one
+that got the authorization url.  This might not be true in a stateless
+client/server (i.e. web-like) setting where a client might connect to a
+different server for every request; or a single server might get requests
+from multiple clients.
+
+To be safe, one should probably explicitly set $token all of the time.
+
 =back
 
 =head1 TODO
+
+stuff
+
+=head1 REFERENCE
+
+=over 4
+
+=item http://www.last.fm/api/intro
+
+=item http://easyclasspage.de/lastfm/seite-11.html
+
+=item http://search.cpan.org/~lbrocard/Net-LastFM-0.34/lib/Net/LastFM.pm
+
+=back
+
+=head1 SEE ALSO
+
+HTTP::Response.  I guess LWP and LWP::UserAgent if you want to use this
+as a more general user agent, too.
+
+=head1 LICENSE
+
+Copyright (c) 2010, Eric Wong <eric@taedium.com>
+
+This module is free software; you can redistribute it or modify it under
+the same terms as Perl itself.
+
 
 =cut
 
