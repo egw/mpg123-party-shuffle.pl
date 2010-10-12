@@ -67,30 +67,9 @@ while (1) {
                 $mpg123_buffer =~ m/^\@R MPG123/m)
             {
                 # we've just finished a track or we've just started up
-
-                # scrobble the last track played.  the last two requirements
-                # (> 30 seconds and at least 1/2 played or > 240 seconds)
-                # are from the Last.fm submissions spec.
-                if ($lastfm_sk and
-                    $mp3_info{ARTIST} and $mp3_info{TITLE} and
-                    $mp3_info{MPG123_FRAME_INFO}->[2] > 30 and
-                    (($mp3_info{MPG123_FRAME_INFO}->[2] > 
-                        $mp3_info{MPG123_FRAME_INFO}->[3]) or
-                      $mp3_info{MPG123_FRAME_INFO}->[2] > 240))
-                {
-                    my $ret = $lastfm->call_auth('track.scrobble',
-                        $lastfm_sk,
-                        artist => $mp3_info{ARTIST},
-                        track  => $mp3_info{TITLE},
-                        timestamp => time(),);
-
-                    print "ERROR scrobbling (track.scrobble)\n".
-                        $ret->decoded_content() and $lastfm_sk = undef
-                        unless $ret->is_success();
-                }
-
                 my $track = shift(@queue);
-                %mp3_info = _mpg123_play($track, $mpg123_in);
+                %mp3_info = _mpg123_play($track, $mpg123_in, \$lastfm_sk,
+                                         \%mp3_info);
             }
 
             if ($mpg123_buffer =~ m/^\@P 1$/) { print "paused\n"; }
@@ -117,7 +96,7 @@ while (1) {
                         artist => $mp3_info{ARTIST},
                         track  => $mp3_info{TITLE},);
 
-                    print "ERROR scrobbling (user.updateNowPlaying)\n".
+                    print "ERROR w/ user.updateNowPlaying\n".
                         $ret->decoded_content() and $lastfm_sk = undef
                         unless $ret->is_success();
                 }
@@ -157,7 +136,8 @@ while (1) {
             elsif ($cmd eq 'play') {
                 print "=> 'play' needs a filename\n" and next unless @args;
 
-                %mp3_info = _mpg123_play(join(" ", @args), $mpg123_in);
+                %mp3_info = _mpg123_play(join(" ", @args), $mpg123_in,
+                                         \$lastfm_sk, \%mp3_info);
             }
             elsif ($cmd eq 'clear') {
                 print "clearing queue!\n";
@@ -325,8 +305,32 @@ sub _add_to_queue {
     else { splice @$queue, $pos, 0, $filename; }
 }
 
+# play an mp3.  note that last_fm_sk is sent as a reference so we can clear
+# it out if there's a scrobbling error.  Ya, we could clear out %mp3_info
+# here, too, but we don't for clarity.
 sub _mpg123_play {
-    my ($track, $mpg123_in) = @_;
+    my ($track, $mpg123_in, $lastfm_sk_ref, $mp3_info) = @_;
+
+    # scrobble the last track played.  the last two requirements
+    # (> 30 seconds and at least 1/2 played or > 240 seconds)
+    # are from the Last.fm submissions spec.
+    if ($$lastfm_sk_ref and
+        $mp3_info->{ARTIST} and $mp3_info->{TITLE} and
+        $mp3_info->{MPG123_FRAME_INFO}->[2] > 30 and
+        (($mp3_info->{MPG123_FRAME_INFO}->[2] > 
+            $mp3_info->{MPG123_FRAME_INFO}->[3]) or
+          $mp3_info->{MPG123_FRAME_INFO}->[2] > 240))
+    {
+        my $ret = $lastfm->call_auth('track.scrobble',
+            $$lastfm_sk_ref,
+            artist => $mp3_info->{ARTIST},
+            track  => $mp3_info->{TITLE},
+            timestamp => time(),);
+
+        print "ERROR w/ track.scrobble!  Clearing the session key.\n".
+            $ret->decoded_content() and $$lastfm_sk_ref = undef
+            unless $ret->is_success();
+    }
 
     print "playing $track\n";
     print $mpg123_in "load $track\n";
