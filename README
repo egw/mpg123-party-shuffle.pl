@@ -53,9 +53,6 @@ Also in no particular order,
 Bugs
 ====
 
-The scrobbling isn't ideal.  It calls user.updateNowPlaying at the start
-of a song (which is good), but then calls track.scrobble at 80% through
-the song.  This means last.fm doesn't think anything is happening for
-the last 20% of the song.  Maybe move track.scrobble to the very end?
-Maybe queue up track.scrobble at 80%, but only send it at the end?
+A track that qualifies for scrobbling won't be scrobbled if the user
+quits out of the party shuffler.
 
