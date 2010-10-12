@@ -68,6 +68,27 @@ while (1) {
             {
                 # we've just finished a track or we've just started up
 
+                # scrobble the last track played.  the last two requirements
+                # (> 30 seconds and at least 1/2 played or > 240 seconds)
+                # are from the Last.fm submissions spec.
+                if ($lastfm_sk and
+                    $mp3_info{ARTIST} and $mp3_info{TITLE} and
+                    $mp3_info{MPG123_FRAME_INFO}->[2] > 30 and
+                    (($mp3_info{MPG123_FRAME_INFO}->[2] > 
+                        $mp3_info{MPG123_FRAME_INFO}->[3]) or
+                      $mp3_info{MPG123_FRAME_INFO}->[2] > 240))
+                {
+                    my $ret = $lastfm->call_auth('track.scrobble',
+                        $lastfm_sk,
+                        artist => $mp3_info{ARTIST},
+                        track  => $mp3_info{TITLE},
+                        timestamp => time(),);
+
+                    print "ERROR scrobbling (track.scrobble)\n".
+                        $ret->decoded_content() and $lastfm_sk = undef
+                        unless $ret->is_success();
+                }
+
                 my $track = shift(@queue);
                 %mp3_info = _mpg123_play($track, $mpg123_in);
             }
@@ -102,35 +123,8 @@ while (1) {
                 }
             }
 
-            if ($mpg123_buffer =~ m/^\@F ([-.\d]+) ([-.\d]+)/m) {
-                $mp3_info{MPG123_FRAME_INFO} = $mpg123_buffer;
-               
-                # scrobble when we're 80% through the song
-
-                if ($2 > 100 and  # mpg321 has this strange thing where
-                                  # sometimes the frames remaining and time
-                                  # remaining are negative.  not sure what
-                                  # to do, so we'll skip them for now.
-                    $lastfm_sk and
-                    not $mp3_info{SCROBBLED} and
-                    $mp3_info{ARTIST} and
-                    $mp3_info{TITLE} and
-                    $1 > $2 * 4)
-                {
-                    # print $mpg123_buffer;
-
-                    my $ret = $lastfm->call_auth('track.scrobble',
-                        $lastfm_sk,
-                        artist => $mp3_info{ARTIST},
-                        track  => $mp3_info{TITLE},
-                        timestamp => time(),);
-
-                    print "ERROR scrobbling (track.scrobble)\n".
-                        $ret->decoded_content() and $lastfm_sk = undef
-                        unless $ret->is_success();
-
-                    $mp3_info{SCROBBLED} = 1;
-                }
+            if ($mpg123_buffer =~ m/^\@F (.*)/m) {
+                $mp3_info{MPG123_FRAME_INFO} = [split(' ', $1)];
             }
 
             # clear the buffer
@@ -348,7 +342,7 @@ sub _print_mp3_info {
           ($mp3_info->{YEAR} ? " ($mp3_info->{YEAR})" : "") . "\n"
           if $mp3_info->{ALBUM};
 
-    print "MPG123_FRAME_INFO: $mp3_info->{MPG123_FRAME_INFO}\n"
+    print "MPG123_FRAME_INFO: @{$mp3_info->{MPG123_FRAME_INFO}}\n"
         if $mp3_info->{MPG123_FRAME_INFO};
 }
 
