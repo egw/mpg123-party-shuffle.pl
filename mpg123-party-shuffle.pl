@@ -155,7 +155,9 @@ while (1) {
             elsif ($cmd eq 'scrobble') {
                 if (not @args) {
                     print "scrobble what?  scrobble <session key> or ".
-                        "scrobble off?\n";
+                        "scrobble off?\nscrobbling is currently ".
+                        ($lastfm_sk ? "on" : "off").
+                        "\n";
                 }
                 elsif (lc($args[0]) eq 'off') {
                     print "scrobbling turned off\n";

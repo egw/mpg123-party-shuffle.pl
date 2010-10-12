@@ -40,6 +40,7 @@ Also in no particular order,
 
   x scrobble
     . step the user through the authentication process
+    . love/unlove/ban/unban
   x read id3 tags (mpg123 and mpg321 do this, so it's mostly parsing
     the @I output.)
   . ratings (save to id3 POPM (popularimeter) tag)
