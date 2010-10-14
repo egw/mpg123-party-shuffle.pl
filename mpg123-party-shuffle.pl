@@ -5,6 +5,7 @@
 use warnings;
 use strict;
 
+use Encode;
 use Fcntl;
 use IO::Select;
 use IPC::Open2;
@@ -82,7 +83,7 @@ while (1) {
                 # with unpack.  the map removes trailing spaces.
 
                 @mp3_info{qw/TITLE ARTIST ALBUM YEAR COMMENT GENRE/} =
-                    map {s/\s+$//; $_;}
+                    map {s/\s+$//; encode_utf8($_);}
                     unpack("a30 a30 a30 a4 a30 a30", $1);
 
                 _print_mp3_info(\%mp3_info);
