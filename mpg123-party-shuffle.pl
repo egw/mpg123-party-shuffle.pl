@@ -14,6 +14,7 @@ use List::Util qw(shuffle);
 use LastFM;
 
 my $MIN_QUEUE_SIZE = 5;
+my $DEBUG = 1;
 
 my $dirs = [grep {-d $_} @ARGV];
 print <<__USAGE__ and exit unless @$dirs;
@@ -77,7 +78,7 @@ while (1) {
 
             if ($mpg123_buffer =~ m/^\@P 2$/) { print "resumed\n"; }
 
-            if ($mpg123_buffer =~ m/^\@I ID3:(.*)/) {
+            if ($mpg123_buffer =~ m/^\@I ID3:(.*)/m) {
                 # my version of mpg321 only reads id3v1 tags :( the info
                 # is in a fixed-length format, which we parse with unpack.
                 # the map removes trailing spaces and encodes to utf8.
@@ -85,26 +86,46 @@ while (1) {
                 @mp3_info{qw/TITLE ARTIST ALBUM YEAR COMMENT GENRE/} =
                     map {s/\s+$//; encode_utf8($_);}
                     unpack("a30 a30 a30 a4 a30 a30", $1);
+            }
 
-                _print_mp3_info(\%mp3_info);
+            if ($mpg123_buffer =~ m/^\@S (.*)/m) {
+                # my version of mpg321 only reads id3v1 tags :( the info
+                # is in a fixed-length format, which we parse with unpack.
+                # the map removes trailing spaces and encodes to utf8.
 
-                # scrobble.  perhaps this should be forked or something so
-                # the rest of the script isn't blocked.  anyhow turn off
-                # scrobbling on error.
-                if ($lastfm_sk and $mp3_info{ARTIST} and $mp3_info{TITLE}) {
-                    my $ret = $lastfm->call_auth('track.updateNowPlaying',
-                        $lastfm_sk,
-                        artist => $mp3_info{ARTIST},
-                        track  => $mp3_info{TITLE},);
-
-                    print "ERROR w/ track.updateNowPlaying\n".
-                        $ret->decoded_content() and $lastfm_sk = undef
-                        unless $ret->is_success();
-                }
+                $mp3_info{MPG123_STREAM_INFO} = [split(' ', $1)];
+                
+                # duration in seconds = size in bits / bitrate 
+                my $file_size = $mp3_info{STAT}->[7] * 8;
+                my $bitrate = $mp3_info{MPG123_STREAM_INFO}->[10] * 1000;
+                $mp3_info{DURATION} = int(($mp3_info{STAT}->[7] * 8) / ($mp3_info{MPG123_STREAM_INFO}->[10] * 1000));
             }
 
             if ($mpg123_buffer =~ m/^\@F (.*)/m) {
                 $mp3_info{MPG123_FRAME_INFO} = [split(' ', $1)];
+
+                # scrobble.  perhaps this should be forked or something so
+                # the rest of the script isn't blocked.  anyhow turn off
+                # scrobbling on error.
+                if ($mp3_info{SCROBBLED} == 0 and $lastfm_sk and
+                    $mp3_info{ARTIST} and $mp3_info{TITLE})
+                {
+                    _print_mp3_info(\%mp3_info);
+
+                    my $ret = $lastfm->call_auth('track.updateNowPlaying',
+                        $lastfm_sk,
+                        artist => $mp3_info{ARTIST},
+                        track  => $mp3_info{TITLE},
+                        duration => $mp3_info{DURATION},);
+
+                    print $ret->decoded_content() if $DEBUG;
+
+                    print "ERROR w/ track.updateNowPlaying\n".
+                        $ret->decoded_content() and $lastfm_sk = undef
+                        unless $ret->is_success();
+
+                    $mp3_info{SCROBBLED} = 1;
+                }
             }
 
             # clear the buffer
@@ -168,6 +189,9 @@ while (1) {
                     print "scrobbling turned on\n";
                     $lastfm_sk = $args[0];
                 }
+            }
+            elsif ($cmd eq 'debug') {
+                print '$DEBUG = '.(@args ? $DEBUG = $args[0] : $DEBUG)."\n";
             }
             else { print $mpg123_in "$in\n"; }
         }
@@ -330,6 +354,8 @@ sub _mpg123_play {
             track  => $mp3_info->{TITLE},
             timestamp => time(),);
 
+        print $ret->decoded_content() if $DEBUG;
+
         print "ERROR w/ track.scrobble!  Clearing the session key.\n".
             $ret->decoded_content() and $$lastfm_sk_ref = undef
             unless $ret->is_success();
@@ -338,18 +364,25 @@ sub _mpg123_play {
     print "playing $track\n";
     print $mpg123_in "load $track\n";
 
-    return (FILENAME => $track, SCROBBLED => 0, ARTIST => '', TITLE => '');
+    return (FILENAME => $track, , ARTIST => '', TITLE => '', SCROBBLED => 0,
+            STAT => [stat($track)]);
 }
 
 sub _print_mp3_info {
     my ($mp3_info) = @_;
 
-    print "ARTIST: $mp3_info->{ARTIST}\nTITLE : $mp3_info->{TITLE}\n";
+    print "ARTIST: $mp3_info->{ARTIST}\nTITLE : $mp3_info->{TITLE}".
+          ($mp3_info->{DURATION} ? " ($mp3_info->{DURATION} secs)" : "")."\n";
     print "ALBUM : $mp3_info->{ALBUM}" .
           ($mp3_info->{YEAR} ? " ($mp3_info->{YEAR})" : "") . "\n"
           if $mp3_info->{ALBUM};
 
-    print "MPG123_FRAME_INFO: @{$mp3_info->{MPG123_FRAME_INFO}}\n"
-        if $mp3_info->{MPG123_FRAME_INFO};
+    if ($DEBUG) {
+        print "STAT: @{$mp3_info->{STAT}}\n" if $mp3_info->{STAT};
+        print "MPG123_STREAM_INFO: @{$mp3_info->{MPG123_STREAM_INFO}}\n"
+            if $mp3_info->{MPG123_STREAM_INFO};
+        print "MPG123_FRAME_INFO: @{$mp3_info->{MPG123_FRAME_INFO}}\n"
+            if $mp3_info->{MPG123_FRAME_INFO};
+    }
 }
 
