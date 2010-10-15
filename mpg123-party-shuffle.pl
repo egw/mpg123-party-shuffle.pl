@@ -78,9 +78,9 @@ while (1) {
             if ($mpg123_buffer =~ m/^\@P 2$/) { print "resumed\n"; }
 
             if ($mpg123_buffer =~ m/^\@I ID3:(.*)/) {
-                # my version of mpg321 only reads id3v1 tags :(
-                # the info is in a fixed-length format, which we parse
-                # with unpack.  the map removes trailing spaces.
+                # my version of mpg321 only reads id3v1 tags :( the info
+                # is in a fixed-length format, which we parse with unpack.
+                # the map removes trailing spaces and encodes to utf8.
 
                 @mp3_info{qw/TITLE ARTIST ALBUM YEAR COMMENT GENRE/} =
                     map {s/\s+$//; encode_utf8($_);}
@@ -88,16 +88,16 @@ while (1) {
 
                 _print_mp3_info(\%mp3_info);
 
-                # scrobble.  perhaps this should be forked or something
-                # so the rest of the script isn't blocked.  anyhow
-                # turn off scrobbling on error.
+                # scrobble.  perhaps this should be forked or something so
+                # the rest of the script isn't blocked.  anyhow turn off
+                # scrobbling on error.
                 if ($lastfm_sk and $mp3_info{ARTIST} and $mp3_info{TITLE}) {
-                    my $ret = $lastfm->call_auth('user.updateNowPlaying',
+                    my $ret = $lastfm->call_auth('track.updateNowPlaying',
                         $lastfm_sk,
                         artist => $mp3_info{ARTIST},
                         track  => $mp3_info{TITLE},);
 
-                    print "ERROR w/ user.updateNowPlaying\n".
+                    print "ERROR w/ track.updateNowPlaying\n".
                         $ret->decoded_content() and $lastfm_sk = undef
                         unless $ret->is_success();
                 }
@@ -155,8 +155,8 @@ while (1) {
             }
             elsif ($cmd eq 'scrobble') {
                 if (not @args) {
-                    print "scrobble what?  scrobble <session key> or ".
-                        "scrobble off?\nscrobbling is currently ".
+                    print "scrobble <session key> or ".
+                        "scrobble off.  scrobbling is currently ".
                         ($lastfm_sk ? "on" : "off").
                         "\n";
                 }

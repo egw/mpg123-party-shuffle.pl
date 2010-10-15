@@ -37,15 +37,7 @@ sub call {
                  keys %params).
         $self->{api_secret});
 
-    # temporarily redirect scrobbling requests to post.audioscrobbler.com
-    # see http://users.last.fm/~tims/Scrobbling2_0_beta_docs.html
-    my $service_root = $lastfm_service_root;
-    if (lc($method) eq 'user.updatenowplaying' or
-        lc($method) eq 'track.scrobble' or
-        lc($method) eq 'track.scrobblebatch')
-    { $service_root = 'http://post.audioscrobbler.com/2.0/'; }
-
-    my $uri = URI->new($service_root);
+    my $uri = URI->new($lastfm_service_root);
     while (my ($k, $v) = each(%params)) {
         $uri->query_param($k => $v);
     }
