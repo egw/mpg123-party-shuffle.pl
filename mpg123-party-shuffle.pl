@@ -50,7 +50,7 @@ $lastfm->api_secret('229b9a270843b824e365b2b5ace85f04');
 
 while (1) {
 
-    foreach my $fh ($select->can_read(0.25)) {
+    foreach my $fh ($select->can_read()) {
         my $ret = sysread $fh, my $in, 1024;
 
         if ($fh == $mpg123_out) {
@@ -116,7 +116,7 @@ while (1) {
                         $lastfm_sk,
                         artist => $mp3_info{ARTIST},
                         track  => $mp3_info{TITLE},
-                        duration => $mp3_info{DURATION},);
+                        duration => $mp3_info{DURATION}, );
 
                     print $ret->decoded_content() if $DEBUG;
 
@@ -352,7 +352,7 @@ sub _mpg123_play {
             $$lastfm_sk_ref,
             artist => $mp3_info->{ARTIST},
             track  => $mp3_info->{TITLE},
-            timestamp => time(),);
+            timestamp => time(), );
 
         print $ret->decoded_content() if $DEBUG;
 
