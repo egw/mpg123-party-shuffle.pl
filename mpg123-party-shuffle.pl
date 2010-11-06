@@ -169,7 +169,6 @@ while (1) {
             }
             elsif ($cmd eq 'add') {
                 _add_to_queue(\@queue, \@args);
-                _print_queue(\@queue);
             }
             elsif ($cmd eq 'info') {
                 _print_mp3_info(\%mp3_info);
