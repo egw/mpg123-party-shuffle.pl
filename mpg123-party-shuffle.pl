@@ -14,9 +14,11 @@ use List::Util qw(shuffle);
 use LastFM;
 
 my $MIN_QUEUE_SIZE = 5;
-my $DEBUG = 1;
+my $DEBUG = 0;
+my $HISTORY_SIZE = 35;     # to keep from repeating files too often
 
 my $dirs = [grep {-d $_} @ARGV];
+my $history = [];
 print <<__USAGE__ and exit unless @$dirs;
 useage: mpg123-party-shuffle.pl <directory directory ...>
 __USAGE__
@@ -192,6 +194,9 @@ while (1) {
             elsif ($cmd eq 'debug') {
                 print '$DEBUG = '.(@args ? $DEBUG = $args[0] : $DEBUG)."\n";
             }
+            elsif ($cmd eq 'history') {
+                print join(", ", @$history)."\n";
+            }
             else { print $mpg123_in "$in\n"; }
         }
 
@@ -231,6 +236,10 @@ sub _get_random_mp3 {
 
     # make sure the file's an mp3
     goto RESET unless $inode =~ m/.mp3$/i;
+
+    goto RESET if grep { $inode eq $_ } @$history;
+    unshift @$history, $inode;
+    splice @$history, $HISTORY_SIZE if @$history > $HISTORY_SIZE;
 
     return $inode;
 }
@@ -370,6 +379,7 @@ sub _mpg123_play {
 sub _print_mp3_info {
     my ($mp3_info) = @_;
 
+    print "FILE: $mp3_info->{FILENAME}\n";
     print "ARTIST: $mp3_info->{ARTIST}\nTITLE : $mp3_info->{TITLE}".
           ($mp3_info->{DURATION} ? " ($mp3_info->{DURATION} secs)" : "")."\n";
     print "ALBUM : $mp3_info->{ALBUM}" .
