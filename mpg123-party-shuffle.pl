@@ -97,15 +97,18 @@ while (1) {
                 elsif ($line =~ m/^\@S (.*)/) {
     
                     $mp3_info{MPG123_STREAM_INFO} = [split(' ', $1)];
-                    
+                   
                     # duration in seconds = size in bits / bitrate 
-                    my $file_size = $mp3_info{STAT}->[7] * 8;
-                    my $bitrate = $mp3_info{MPG123_STREAM_INFO}->[10] * 1000;
-                    $mp3_info{DURATION} = int(($mp3_info{STAT}->[7] * 8) / ($mp3_info{MPG123_STREAM_INFO}->[10] * 1000));
+                    # XXX: THIS DOESN'T WORK FOR VBR MP3S
+                    # my $file_size = $mp3_info{STAT}->[7] * 8;
+                    # my $bitrate = $mp3_info{MPG123_STREAM_INFO}->[10] * 1000;
+                    # $mp3_info{DURATION} = int(($mp3_info{STAT}->[7] * 8) / ($mp3_info{MPG123_STREAM_INFO}->[10] * 1000));
                 }
     
-                elsif ($line =~ m/^\@F (.*)/m) {
+                elsif ($line =~ m/^\@F (.*)/) {
                     $mp3_info{MPG123_FRAME_INFO} = [split(' ', $1)];
+
+                    $mp3_info{DURATION} ||= int($mp3_info{MPG123_FRAME_INFO}->[2] + $mp3_info{MPG123_FRAME_INFO}->[3]);
     
                     # scrobble.  perhaps this should be forked or something so
                     # the rest of the script isn't blocked.  anyhow turn off
