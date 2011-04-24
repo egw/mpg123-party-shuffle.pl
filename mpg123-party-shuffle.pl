@@ -23,8 +23,8 @@ print <<__USAGE__ and exit unless @$dirs;
 useage: mpg123-party-shuffle.pl <directory directory ...>
 __USAGE__
 
-my $pid = open2(my $mpg123_out, my $mpg123_in, "mpg321", "-R", "-");
-# my $pid = open2(my $mpg123_out, my $mpg123_in, "mpg123", "--remote");
+# my $pid = open2(my $mpg123_out, my $mpg123_in, "mpg321", "-R", "-");
+my $pid = open2(my $mpg123_out, my $mpg123_in, "mpg123", "--remote");
 
 my $select = IO::Select->new();
 $select->add(\*STDIN);
@@ -67,66 +67,68 @@ while (1) {
             # contain more than one line.  TODO: proper split and
             # parse every line.
 
-            if ($mpg123_buffer =~ m/^\@P 0$/m or
-                $mpg123_buffer =~ m/^\@R MPG123/m)
-            {
-                # we've just finished a track or we've just started up
-                my $track = shift(@queue);
-                %mp3_info = _mpg123_play($track, $mpg123_in, \$lastfm_sk,
-                                         \%mp3_info);
-            }
-
-            if ($mpg123_buffer =~ m/^\@P 1$/) { print "paused\n"; }
-
-            if ($mpg123_buffer =~ m/^\@P 2$/) { print "resumed\n"; }
-
-            if ($mpg123_buffer =~ m/^\@I ID3:(.*)/m) {
-                # my version of mpg321 only reads id3v1 tags :( the info
-                # is in a fixed-length format, which we parse with unpack.
-                # the map removes trailing spaces and encodes to utf8.
-
-                @mp3_info{qw/TITLE ARTIST ALBUM YEAR COMMENT GENRE/} =
-                    map {s/\s+$//; encode_utf8($_);}
-                    unpack("a30 a30 a30 a4 a30 a30", $1);
-            }
-
-            if ($mpg123_buffer =~ m/^\@S (.*)/m) {
-                # my version of mpg321 only reads id3v1 tags :( the info
-                # is in a fixed-length format, which we parse with unpack.
-                # the map removes trailing spaces and encodes to utf8.
-
-                $mp3_info{MPG123_STREAM_INFO} = [split(' ', $1)];
-                
-                # duration in seconds = size in bits / bitrate 
-                my $file_size = $mp3_info{STAT}->[7] * 8;
-                my $bitrate = $mp3_info{MPG123_STREAM_INFO}->[10] * 1000;
-                $mp3_info{DURATION} = int(($mp3_info{STAT}->[7] * 8) / ($mp3_info{MPG123_STREAM_INFO}->[10] * 1000));
-            }
-
-            if ($mpg123_buffer =~ m/^\@F (.*)/m) {
-                $mp3_info{MPG123_FRAME_INFO} = [split(' ', $1)];
-
-                # scrobble.  perhaps this should be forked or something so
-                # the rest of the script isn't blocked.  anyhow turn off
-                # scrobbling on error.
-                if ($mp3_info{SCROBBLED} == 0 and $lastfm_sk and
-                    $mp3_info{ARTIST} and $mp3_info{TITLE})
+            foreach my $line (split(/\n/, $mpg123_buffer)) {
+                if ($line =~ m/^\@P 0$/ or $line =~ m/^\@R MPG123/m)
                 {
-                    _print_mp3_info(\%mp3_info);
+                    # we've just finished a track or we've just started up
+                    my $track = shift(@queue);
+                    %mp3_info = _mpg123_play($track, $mpg123_in, \$lastfm_sk,
+                                             \%mp3_info);
+                }
 
-                    my $ret = $lastfm->call_auth('track.updateNowPlaying',
-                        $lastfm_sk,
-                        artist => $mp3_info{ARTIST},
-                        track  => $mp3_info{TITLE},
-                        duration => $mp3_info{DURATION}, );
+                elsif ($line =~ m/^\@P 1$/) { print "paused\n"; }
 
-                    print $ret->decoded_content() if $DEBUG;
+                elsif ($line =~ m/^\@P 2$/) { print "resumed\n"; }
 
-                    print "ERROR w/ track.updateNowPlaying\n".
-                        $ret->decoded_content() and $lastfm_sk = undef
-                        unless $ret->is_success();
+                elsif ($line  =~ m/^\@I ID3:(.*)/) {
+                    # id3v1 tags
+    
+                    @mp3_info{qw/TITLE ARTIST ALBUM YEAR COMMENT GENRE/} =
+                        map {s/\s+$//; encode_utf8($_);}
+                        unpack("a30 a30 a30 a4 a30 a30", $1);
+                }
 
-                    $mp3_info{SCROBBLED} = 1;
+                elsif ($line =~ m/^\@I ID3v2\.(.*):(.*)/) {
+                    # id3v2 tags
+
+                    $mp3_info{uc($1)} = encode_utf8($2);
+                }
+    
+                elsif ($line =~ m/^\@S (.*)/) {
+    
+                    $mp3_info{MPG123_STREAM_INFO} = [split(' ', $1)];
+                    
+                    # duration in seconds = size in bits / bitrate 
+                    my $file_size = $mp3_info{STAT}->[7] * 8;
+                    my $bitrate = $mp3_info{MPG123_STREAM_INFO}->[10] * 1000;
+                    $mp3_info{DURATION} = int(($mp3_info{STAT}->[7] * 8) / ($mp3_info{MPG123_STREAM_INFO}->[10] * 1000));
+                }
+    
+                elsif ($line =~ m/^\@F (.*)/m) {
+                    $mp3_info{MPG123_FRAME_INFO} = [split(' ', $1)];
+    
+                    # scrobble.  perhaps this should be forked or something so
+                    # the rest of the script isn't blocked.  anyhow turn off
+                    # scrobbling on error.
+                    if ($mp3_info{SCROBBLED} == 0 and $lastfm_sk and
+                        $mp3_info{ARTIST} and $mp3_info{TITLE})
+                    {
+                        _print_mp3_info(\%mp3_info);
+    
+                        my $ret = $lastfm->call_auth('track.updateNowPlaying',
+                            $lastfm_sk,
+                            artist => $mp3_info{ARTIST},
+                            track  => $mp3_info{TITLE},
+                            duration => $mp3_info{DURATION}, );
+    
+                        print $ret->decoded_content() if $DEBUG;
+    
+                        print "ERROR w/ track.updateNowPlaying\n".
+                            $ret->decoded_content() and $lastfm_sk = undef
+                            unless $ret->is_success();
+    
+                        $mp3_info{SCROBBLED} = 1;
+                    }
                 }
             }
 

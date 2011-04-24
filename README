@@ -15,9 +15,6 @@ shallower in the tree.  The benefits are that no database of available
 songs needs to be maintained and that changes to the directory (like
 adding or moving or removing songs) show up immediately.
 
-Right now this uses mpg321 instead of mpg123 because mpg123 keeps on
-dying randomly on my netbook.
-
 Usage
 =====
 
